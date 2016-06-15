@@ -2,6 +2,8 @@ import numpy as np
 from math_functions.c_to_r_mat import CtoRMat
 import scipy.linalg as la
 from math_functions.Get_state_index import Get_State_index
+from math_functions.Cops import Build_c_ops
+
 
 class SystemParametersGeneral:
 
@@ -27,33 +29,30 @@ class SystemParametersGeneral:
         self.freq_ge = 3.9225#GHz
         self.ens = np.array([ 2*np.pi*ii*(self.freq_ge - 0.5*(ii-1)*self.alpha) for ii in np.arange(self.qubit_state_num)])
 
-        self.mode_state_num = 3
+        self.mode_state_num = 0
 
         self.qm_g1 = 2*np.pi*0.1 #GHz
-        self.mode_freq1 = 6.0 #GHz
-        self.mode_ens1 = np.array([ 2*np.pi*ii*(self.mode_freq1) for ii in np.arange(self.mode_state_num)])
+        
+        
 
 
         self.qm_g2 = 2*np.pi*0.1 #GHz
-        self.mode_freq2 = 6.5 #GHz
-        self.mode_ens2 = np.array([ 2*np.pi*ii*(self.mode_freq2) for ii in np.arange(self.mode_state_num)])
+        
+        
 
-        self.state_num = self.qubit_state_num * (self.mode_state_num**2)
+        self.state_num = self.qubit_state_num 
 
         
-        states_h = range(3*self.mode_state_num**2,4*self.mode_state_num**2)
-        states_gef02 = [2,self.mode_state_num**2+2,2*self.mode_state_num**2+2]
-        states_gef20 = [2*self.mode_state_num,self.mode_state_num**2+2*self.mode_state_num,2*self.mode_state_num**2+2*self.mode_state_num]
+        
 
-        self.states_forbidden_list = states_h + states_gef02 + states_gef20
-
+        self.states_forbidden_list = [3]
 
         self.pts_per_period = 10
         self.exp_terms = 20
         self.subpixels = 50
         
 
-        self.dt = (1./self.mode_freq2)/self.pts_per_period
+        self.dt = (1./6.5)/self.pts_per_period
         if self.Interpolation:
             self.Dt = self.dt*self.subpixels
         else:
@@ -80,39 +79,28 @@ class SystemParametersGeneral:
         # Create operator matrix in numpy array
 
         H_q = np.diag(self.ens)
-        H_m1 = np.diag(self.mode_ens1)
-        H_m2 = np.diag(self.mode_ens2)
+        
 
         Q_x   = np.diag(np.sqrt(np.arange(1,self.qubit_state_num)),1)+np.diag(np.sqrt(np.arange(1,self.qubit_state_num)),-1)
-        #Q_y   = (0+1j) *(np.diag(np.sqrt(np.arange(1,self.qubit_state_num)),1)-np.diag(np.sqrt(np.arange(1,self.qubit_state_num)),-1))
+        Q_y   = (0+1j) *(np.diag(np.sqrt(np.arange(1,self.qubit_state_num)),1)-np.diag(np.sqrt(np.arange(1,self.qubit_state_num)),-1))
         Q_z   = np.diag(np.arange(0,self.qubit_state_num))
 
-        M_x = np.diag(np.sqrt(np.arange(1,self.mode_state_num)),1)+np.diag(np.sqrt(np.arange(1,self.mode_state_num)),-1)
+        
 
-        self.I_q = np.identity(self.qubit_state_num)
-        self.I_m = np.identity(self.mode_state_num)
-
-        XI = np.kron(Q_x,np.kron(self.I_m,self.I_m))
-        #YI = np.kron(Q_y,np.kron(self.I_m,self.I_m))
-        ZI = np.kron(Q_z,np.kron(self.I_m,self.I_m))
-
-        self.ops = [XI,ZI]
-
-        x_op = CtoRMat(-1j*self.dt*XI)
-        #y_op = CtoRMat(YI)
-        z_op = CtoRMat(-1j*self.dt*ZI)
-
+        
+        x_op = CtoRMat(-1j*self.dt*Q_x)
+        y_op = CtoRMat(Q_y)
+        z_op = CtoRMat(-1j*self.dt*Q_z)
+        
+             
         self.ops = [x_op,z_op]
+            
         self.ops_max_amp = [4.0,2*np.pi*2.0]
 
         self.ops_len = len(self.ops)
 
-        self.H0_c = np.kron(H_q,np.kron(self.I_m,self.I_m)) + np.kron(self.I_q,np.kron(H_m1,self.I_m)) +\
-        np.kron(self.I_q,np.kron(self.I_m,H_m2)) + self.qm_g1*np.kron(Q_x,np.kron(M_x,self.I_m)) +\
-        self.qm_g2*np.kron(Q_x,np.kron(self.I_m,M_x))
+        self.H0_c = H_q 
         self.w_c, self.v_c = la.eig(self.H0_c)
-
-        self.H0 = CtoRMat(-1j*self.dt*self.H0_c)
         
         self.dressed=[]
         if self.D:
@@ -135,11 +123,24 @@ class SystemParametersGeneral:
                             index=index2+1
                     self.dressed.append(index)
         
-        self.H0_diag=np.diag(self.w_c)
-        self.q_identity_c = np.identity(self.qubit_state_num)
-        self.m_identity_c = np.identity(self.mode_state_num)
-
-        self.identity_c = np.kron(self.q_identity_c,np.kron(self.m_identity_c,self.m_identity_c))
+        self.H0_diag=np.diag(self.w_c) 
+        self.c_ops = Build_c_ops(self.qubit_state_num,self.mode_state_num,self.v_c,self.dressed)
+        self.Heff_c=self.H0_c
+        self.cdagger_c=[]
+        self.c_ops_new=[]
+        #ceating the effective hamiltonian that describes the evolution of states if no jumps occur
+        for ii in range (len(self.c_ops)):
+            temp = np.dot(np.transpose(np.conjugate(self.c_ops[ii])),self.c_ops[ii])
+            self.c_ops_new.append(CtoRMat(self.c_ops[ii]))
+            self.cdagger_c.append(CtoRMat(temp))
+            self.Heff_c= self.Heff_c + ((0-1j)/2)* ( temp)
+        #making the effective hamiltonian ready for tensorflow later
+        self.H0 = CtoRMat(-1j*self.dt*self.H0_c)
+        self.Heff = CtoRMat(-1j*self.dt*self.Heff_c)
+      
+        
+        self.identity_c = np.identity(self.qubit_state_num)
+        
         self.identity = CtoRMat(self.identity_c)
         
     def init_one_minus_gaussian_envelop(self):

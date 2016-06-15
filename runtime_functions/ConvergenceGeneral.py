@@ -10,44 +10,37 @@ class ConvergenceGeneral:
     def reset_convergence(self):
         self.costs=[]
         self.reg_costs = []
+        self.jumps_array=[]
+        self.jumps_plot=[]
         self.iterations=[]
         self.learning_rate=[]
         self.last_iter = 0
+        self.shown_iter=0
         self.accumulate_rate = 1.00
+        
 
-    def update_convergence(self,last_cost, last_reg_cost, anly):
+    def update_convergence(self,last_cost, last_reg_cost,js, anly):
         self.last_cost = last_cost
         self.last_reg_cost = last_reg_cost
-          
+        self.jumps = js
         self.anly = anly
         self.plot_summary()
     
     def get_convergence(self):
         self.costs.append(self.last_cost)
         self.reg_costs.append(self.last_reg_cost)
+        self.jumps_array=np.concatenate((self.jumps_array,self.jumps),axis=0)
+        self.jumps_plot=np.reshape(self.jumps_array,[len(self.jumps),self.shown_iter+1], order='F')
         self.iterations.append(self.last_iter)
         self.last_iter+=self.update_step
+        self.shown_iter+=1
         
     def plot_inter_vecs(self,pop_inter_vecs):
-        plt.plot(np.array([self.sys_para.dt* ii for ii in range(self.sys_para.steps)]),np.array(pop_inter_vecs[0,1:]),label='g00')
-        plt.plot(np.array([self.sys_para.dt* ii for ii in range(self.sys_para.steps)]),np.array(pop_inter_vecs[1,1:]),label='g01')
-        plt.plot(np.array([self.sys_para.dt* ii for ii in range(self.sys_para.steps)]),np.array(pop_inter_vecs[self.sys_para.mode_state_num,1:]),label='g10')
-        plt.plot(np.array([self.sys_para.dt* ii for ii in range(self.sys_para.steps)]),np.array(pop_inter_vecs[self.sys_para.mode_state_num+1,1:]),label='g11')
-        plt.plot(np.array([self.sys_para.dt* ii for ii in range(self.sys_para.steps)])
-    ,np.array(pop_inter_vecs[self.sys_para.mode_state_num**2:2*self.sys_para.mode_state_num**2,1:].sum(axis=0))
-             ,label='e(012)(012)')
-        plt.plot(np.array([self.sys_para.dt* ii for ii in range(self.sys_para.steps)])
-    ,np.array(pop_inter_vecs[2*self.sys_para.mode_state_num**2:3*self.sys_para.mode_state_num**2,1:].sum(axis=0))
-             ,label='f(012)(012)') 
-        plt.plot(np.array([self.sys_para.dt* ii for ii in range(self.sys_para.steps)])
-             ,np.array(pop_inter_vecs[3*self.sys_para.mode_state_num**2:4*self.sys_para.mode_state_num**2,1:].sum(axis=0)) +\
-             np.array(pop_inter_vecs[2,1:])+\
-             np.array(pop_inter_vecs[self.sys_para.mode_state_num**2+2,1:])+\
-             np.array(pop_inter_vecs[2*self.sys_para.mode_state_num**2+2,1:])+\
-             np.array(pop_inter_vecs[2*self.sys_para.mode_state_num,1:])+\
-             np.array(pop_inter_vecs[self.sys_para.mode_state_num**2+2*self.sys_para.mode_state_num,1:])+\
-             np.array(pop_inter_vecs[2*self.sys_para.mode_state_num**2+2*self.sys_para.mode_state_num,1:])
-             ,label='forbidden')
+        
+        plt.plot(np.array([self.sys_para.dt* ii for ii in range(self.sys_para.steps)]),np.array(pop_inter_vecs[0,1:]),label='g')
+        plt.plot(np.array([self.sys_para.dt* ii for ii in range(self.sys_para.steps)]),np.array(pop_inter_vecs[1,1:]),label='e')
+        plt.plot(np.array([self.sys_para.dt* ii for ii in range(self.sys_para.steps)]),np.array(pop_inter_vecs[2,1:]),'k',label='f')
+        plt.plot(np.array([self.sys_para.dt* ii for ii in range(self.sys_para.steps)]),np.array(pop_inter_vecs[3,1:]),label='Forbidden')
         
         plt.ylabel('Population')
         plt.ylim(0,1)
@@ -133,8 +126,8 @@ class ConvergenceGeneral:
         
         
         ## cost
-        plt.subplot(gs[0, :],title='Error = %.9f; Unitary Metric: %.5f; Runtime: %.1fs; Estimated Remaining Runtime: %.1fh' % (self.last_cost,
-                                                                                                   self.anly.tf_unitary_scale.eval(),
+        plt.subplot(gs[0, :],title='Average Error = %.9f; Runtime: %.1fs; Estimated Remaining Runtime: %.1fh' % (self.last_cost,
+                                                                                                   
                                                                                                  
                                                                                                   self.runtime,
                                                                                                   self.estimated_runtime))
@@ -147,15 +140,15 @@ class ConvergenceGeneral:
         np.save("./data/GRAPE-costs", np.array(self.costs))
     
         ## unitary evolution
-        M = self.anly.get_final_state()
-        plt.subplot(gs[1, 0],title="operator: real")
-        plt.imshow(M.real,interpolation='none')
-        plt.clim(-1,1)
-        plt.colorbar()
-        plt.subplot(gs[1, 1],title="operator: imaginary")
-        plt.imshow(M.imag,interpolation='none')
-        plt.clim(-1,1)
-        plt.colorbar()
+        
+        plt.subplot(gs[1, :],title='Average Jumps per Trajectory ')
+        for jj in range(len (self.jumps)):
+            plt.plot(np.array(self.iterations),np.array(self.jumps_plot[jj]),label=str(jj))
+        
+        plt.ylabel('jumps')
+        plt.xlabel('Iteration')
+        #yscale('log')
+        plt.legend()
         
         ## operators
         plt.subplot(gs[2, :],title="Simulation Weights")
@@ -201,7 +194,7 @@ class ConvergenceGeneral:
             plt.subplot(gs[index+ii, :],title="Evolution")
 
             pop_inter_vecs = inter_vecs[ii]
-            self.plot_inter_vecs_v3(pop_inter_vecs)        
+            self.plot_inter_vecs(pop_inter_vecs)        
         
 	fig = plt.gcf()
 	fig.set_size_inches(15, 50)
